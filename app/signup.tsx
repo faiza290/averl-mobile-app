@@ -1,5 +1,5 @@
-import { View, Text, TouchableOpacity, Image, StyleSheet, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity } from 'react-native';
 
 const AVERL_LOGO = require('../assets/images/averl_logo.png');
 export default function SignupScreen() {
@@ -51,14 +51,17 @@ export default function SignupScreen() {
           onPress={() => router.push('/login')}
         >
           Login
+            {/* remove this line aage jakar, just for testing login. */}
+          
         </Text>
       </Text>
+    
+      
 
       <TouchableOpacity 
         style={styles.loginButton}
         activeOpacity={0.8}
         onPress={() => router.push('/(tabs)/home')}
-        //handle signup logic here
       >
         <Text style={styles.buttonText}>Signup</Text>
       </TouchableOpacity>

@@ -1,26 +1,62 @@
 import { StyleSheet, Text, TouchableOpacity, View, Image } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useState, useEffect, useRef } from 'react';
 
 const LOGO = require('../assets/images/averl_logo.png');
 
 export default function UserInCallScreen() {
   const router = useRouter();
-  
+  const [timer, setTimer] = useState<number>(0);
+ 
+  const timerRef = useRef<number | null>(null);
+  const isMounted = useRef<boolean>(true);
+
+  const formatTime = (seconds: number): string => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes.toString().padStart(2, '0')} : ${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+  useEffect(() => {
+    timerRef.current = setInterval(() => {
+      setTimer((prev) => {
+        if (!isMounted.current) {
+          return prev;
+        }
+        return prev + 1;
+      });
+    }, 1000);
+
+    return () => {
+      isMounted.current = false;
+      if (timerRef.current !== null) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleEndCall = () => {
+    isMounted.current = false;
+    if (timerRef.current !== null) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    router.back();
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.contentBox}>
         <Text style={styles.title}>In call with Rescue AI</Text>
-        
+
         <View style={styles.logoCircle}>
           <Image source={LOGO} style={styles.logoImage} resizeMode="contain" />
         </View>
-        
-        <Text style={styles.timer}>01 : 27</Text>
-        
-        <TouchableOpacity 
-          style={styles.endCallButton}
-          onPress={() => router.back()} 
-        >
+
+        <Text style={styles.timer}>{formatTime(timer)}</Text>
+
+        <TouchableOpacity style={styles.endCallButton} onPress={handleEndCall}>
           <View style={styles.endCallIcon} />
         </TouchableOpacity>
       </View>
@@ -54,7 +90,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#1E1E1E',
     width: '100%',
-    marginBottom: 60, 
+    marginBottom: 60,
   },
   logoCircle: {
     width: 150,
