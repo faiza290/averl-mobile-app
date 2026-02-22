@@ -1,17 +1,19 @@
+import { useRouter } from 'expo-router';
+import axios from 'axios'; // add at top
 import React, { useState } from 'react';
 import {
-  StyleSheet,
-  Text,
-  View,
   Image,
-  TextInput,
-  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
 
 const LOGO = require('../assets/images/averl_logo.png');
 
@@ -20,9 +22,20 @@ export default function LoginScreen() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
-  const handleLogin = () => {
-    console.log('Login pressed:', { username, password });
-    router.push('/home');
+  const handleLogin = async () => {
+    try {
+      const response = await axios.post('http://192.168.100.7:8000/api/login', {
+        username: username,
+        password: password,
+      });
+      console.log('Login success:', response.data);
+      await SecureStore.setItemAsync('userToken', response.data.token); 
+      await SecureStore.setItemAsync('userRole', response.data.user.role);
+      router.push('/(tabs)/home');
+    } catch (error: any) {
+      console.error('Login error:', error.response?.data || error.message);
+      alert('Login failed: ' + (error.response?.data?.detail || 'Try again'));
+    }
   };
 
   const handleSignUp = () => {
@@ -81,14 +94,14 @@ export default function LoginScreen() {
               <Text style={styles.buttonText}>Login</Text>
             </TouchableOpacity>
 
-            <Text style={styles.dividerText}>or Don't have an account?</Text>
+            <Text style={styles.dividerText}>Or</Text>
 
             <TouchableOpacity
               style={styles.signUpButton}
               onPress={handleSignUp}
               activeOpacity={0.8}
             >
-              <Text style={styles.buttonText}>Sign up</Text>
+              <Text style={styles.buttonText}>Sign Up</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -157,12 +170,12 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     width: '100%',
-    height: 36,
-    borderWidth: 1.5,
+    height: 45,
+    borderWidth: 2,
     borderColor: '#B01409',
     borderRadius: 10,
     backgroundColor: '#FFFFFF',
-    marginBottom: 30,
+    marginBottom: 20,
     justifyContent: 'center',
     paddingHorizontal: 12,
   },
@@ -180,7 +193,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: 25,
     marginBottom: 40,
   },
   signUpButton: {

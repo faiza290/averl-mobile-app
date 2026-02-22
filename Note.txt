@@ -1,0 +1,4 @@
+username for login: faiza_khan
+password: abc12345678
+
+if you want to sign up, then make sure to make password of 8 letters.

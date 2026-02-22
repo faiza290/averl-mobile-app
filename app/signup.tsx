@@ -24,13 +24,16 @@ export default function SignupScreen() {
       <TouchableOpacity 
         style={styles.categoryCard}
         activeOpacity={0.8}
+        onPress={() => router.push('/signup_regular_user')}
       >
         <Text style={styles.categoryText}>Regular User</Text>
+        
       </TouchableOpacity>
 
       <TouchableOpacity 
         style={styles.categoryCard}
         activeOpacity={0.8}
+        onPress={() => router.push('/signup_ambulance_driver')}
       >
         <Text style={styles.categoryText}>Ambulance Driver</Text>
       </TouchableOpacity>
@@ -47,23 +50,17 @@ export default function SignupScreen() {
       <Text style={styles.alreadyText}>
         Already have an account?{' '}
         <Text 
-          style={styles.loginLink}
-          onPress={() => router.push('/login')}
-        >
-          Login
-            {/* remove this line aage jakar, just for testing login. */}
-          
+          style={styles.loginLink} 
+        > 
         </Text>
       </Text>
     
-      
-
       <TouchableOpacity 
         style={styles.loginButton}
         activeOpacity={0.8}
-        onPress={() => router.push('/(tabs)/home')}
+        onPress={() => router.push('/login')}
       >
-        <Text style={styles.buttonText}>Signup</Text>
+        <Text style={styles.buttonText}>Login</Text>
       </TouchableOpacity>
     </ScrollView>
   );
