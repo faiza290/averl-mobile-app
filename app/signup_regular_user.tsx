@@ -53,7 +53,7 @@ export default function SignupScreen() {
     }
 
     try {
-      const response = await axios.post('http://192.168.100.7:8000/api/signup', {
+      const response = await axios.post('http://192.168.18.28:8000/api/signup', {
         full_name: fullName.trim(),
         username: username.trim(),
         phone: phone.trim(),

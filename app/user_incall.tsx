@@ -1,201 +1,266 @@
-// app/user_incall.tsx
-import { StyleSheet, Text, TouchableOpacity, View, Image, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import * as FileSystem from "expo-file-system/legacy";
+import React, { useState, useEffect, useRef } from "react";
+import { StyleSheet, Text, TouchableOpacity, View, Image, Alert } from "react-native";
+import { useRouter } from "expo-router";
+import { Audio } from "expo-av";
 import * as SecureStore from 'expo-secure-store';
 
-const LOGO = require('../assets/images/averl_logo.png');
+
+const LOGO = require("../assets/images/averl_logo.png");
+
+const BACKEND_URL = "http://192.168.18.28:8000";
+const VAD_THRESHOLD = -45;//prv it was -65 
+const SILENCE_DURATION = 1800;
+const CHECK_INTERVAL = 200;
 
 export default function UserInCallScreen() {
   const router = useRouter();
-  const [timer, setTimer] = useState<number>(0);
-  const [isSaving, setIsSaving] = useState(false);
- 
-  const timerRef = useRef<number | null>(null);
-  const isMounted = useRef<boolean>(true);
-  const startTimeRef = useRef<Date>(new Date());
 
-  const formatTime = (seconds: number): string => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes.toString().padStart(2, '0')} : ${remainingSeconds.toString().padStart(2, '0')}`;
-  };
+  const [status, setStatus] = useState<
+    "Initializing" | "Listening" | "Speaking" | "Processing" | "AI Speaking"
+  >("Initializing");
 
-  const formatDuration = (seconds: number): string => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
-  };
+  const [transcribedText, setTranscribedText] = useState("");
+  const [assistantReply, setAssistantReply] = useState("");
 
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const monitorIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const isSpeakingRef = useRef(false);
+  const lastAudioTimeRef = useRef(Date.now());
+  const callActiveRef = useRef(true);
+  const startingRef = useRef(false);
+
+  /* ---------------- INIT ---------------- */
   useEffect(() => {
-    startTimeRef.current = new Date();
-    
-    timerRef.current = setInterval(() => {
-      setTimer((prev) => {
-        if (!isMounted.current) {
-          return prev;
-        }
-        return prev + 1;
-      });
-    }, 1000);
+    callActiveRef.current = true;
 
-    return () => {
-      isMounted.current = false;
-      if (timerRef.current !== null) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-    };
-  }, []);
-
-  const saveCallRecord = async (durationSeconds: number) => {
-    try {
-      setIsSaving(true);
-      const token = await SecureStore.getItemAsync('userToken');
-      
-      if (!token) {
-        console.log('No token found, cannot save call record');
+    (async () => {
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission Denied", "Microphone access is required.");
         return;
       }
 
-      const duration = formatDuration(durationSeconds);
-      
-      await axios.post(
-        'http://192.168.100.7:8000/api/call-records',
-        { duration },
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      startRecordingLoop();
+    })();
+
+    return () => {
+      callActiveRef.current = false;
+      stopEverything();
+    };
+  }, []);
+
+  /* ---------------- RECORD ---------------- */
+  const startRecordingLoop = async () => {
+    if (!callActiveRef.current) return;
+    if (recordingRef.current || startingRef.current) return;
+
+    startingRef.current = true;
+
+    try {
+      const recording = new Audio.Recording();
+
+      await recording.prepareToRecordAsync({
+        android: {
+          extension: ".webm",
+          outputFormat: Audio.RECORDING_OPTION_ANDROID_OUTPUT_FORMAT_WEBM,
+          audioEncoder: Audio.RECORDING_OPTION_ANDROID_AUDIO_ENCODER_OPUS,
+          sampleRate: 16000,
+          numberOfChannels: 1,
+          bitRate: 128000,
+        },
+        ios: {
+          extension: ".wav",
+          audioQuality: Audio.RECORDING_OPTION_IOS_AUDIO_QUALITY_HIGH,
+          sampleRate: 16000,
+          numberOfChannels: 1,
+        },
+        isMeteringEnabled: true,
+      });
+
+      recording.setOnRecordingStatusUpdate((s) => {
+        if (!callActiveRef.current) return;
+        if (s.metering !== undefined && s.metering > VAD_THRESHOLD) {
+          lastAudioTimeRef.current = Date.now();
+          if (!isSpeakingRef.current) {
+            isSpeakingRef.current = true;
+            setStatus("Speaking");
           }
         }
-      );
-      
-      console.log('Call record saved successfully');
-    } catch (error: any) {
-      console.error('Error saving call record:', error.response?.data || error.message);
-      // Don't show alert to user, just log the error
+      });
+
+      recordingRef.current = recording;
+      await recording.startAsync();
+
+      setStatus("Listening");
+      isSpeakingRef.current = false;
+      lastAudioTimeRef.current = Date.now();
+
+      monitorIntervalRef.current = setInterval(checkSilence, CHECK_INTERVAL);
     } finally {
-      setIsSaving(false);
+      startingRef.current = false;
     }
   };
 
-  const handleEndCall = async () => {
-    isMounted.current = false;
-    if (timerRef.current !== null) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
+  const checkSilence = () => {
+    if (!callActiveRef.current || !isSpeakingRef.current) return;
 
-    // Save the call record
-    await saveCallRecord(timer);
-    
-    // Navigate back
-    router.back();
+    if (Date.now() - lastAudioTimeRef.current > SILENCE_DURATION) {
+      processSpeech();
+    }
   };
 
+  /* ---------------- PROCESS ---------------- */
+  const processSpeech = async () => {
+    if (!recordingRef.current || !callActiveRef.current) return;
+
+    clearInterval(monitorIntervalRef.current!);
+    monitorIntervalRef.current = null;
+
+    setStatus("Processing");
+
+    await recordingRef.current.stopAndUnloadAsync();
+    const uri = recordingRef.current.getURI();
+    recordingRef.current = null;
+
+    if (uri && callActiveRef.current) {
+      sendToBackend(uri);
+    }
+  };
+
+  /* ---------------- BACKEND ---------------- */
+  const sendToBackend = async (uri: string) => {
+    try {
+      const formData = new FormData();
+      // @ts-ignore
+      formData.append("file", { uri, type: "audio/webm", name: "speech.webm" });
+
+      const token = await SecureStore.getItemAsync('userToken');
+      if (!token) {
+        router.push('/login');
+        return;
+      }
+
+
+      const res = await fetch(`${BACKEND_URL}/chat_audio`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      if (!callActiveRef.current) return;
+
+      const data = await res.json();
+
+      setTranscribedText(data.transcription || "");
+      setAssistantReply(data.reply || "");
+
+      if (!data.audio_base64) {
+        setTimeout(startRecordingLoop, 300);
+        return;
+      }
+
+      const fileUri = `${FileSystem.cacheDirectory}ai.mp3`;
+      await FileSystem.writeAsStringAsync(fileUri, data.audio_base64, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: fileUri },
+        { shouldPlay: true }
+      );
+
+      soundRef.current = sound;
+      setStatus("AI Speaking");
+
+      sound.setOnPlaybackStatusUpdate(async (s) => {
+        if (s.didJustFinish && callActiveRef.current) {
+          await sound.unloadAsync();
+          soundRef.current = null;
+          setTimeout(startRecordingLoop, 300);
+        }
+      });
+    } catch (e) {
+      console.error("Network error:", e);
+      if (callActiveRef.current) {
+        setTimeout(startRecordingLoop, 500);
+      }
+    }
+  };
+
+  /* ---------------- STOP ---------------- */
+  const stopEverything = async () => {
+    clearInterval(monitorIntervalRef.current!);
+
+    if (recordingRef.current) {
+      try { await recordingRef.current.stopAndUnloadAsync(); } catch {}
+      recordingRef.current = null;
+    }
+
+    if (soundRef.current) {
+      try { await soundRef.current.stopAsync(); } catch {}
+      soundRef.current = null;
+    }
+  };
   return (
     <View style={styles.container}>
       <View style={styles.contentBox}>
-        <Text style={styles.title}>In call with Rescue AI</Text>
+        <Text style={styles.title}>Rescue AI Call</Text>
 
-        <View style={styles.logoCircle}>
+        <View style={[
+          styles.logoCircle,
+          status === 'Speaking' && { borderColor: '#4CAF50', borderWidth: 4 },
+          status === 'Processing' && { borderColor: '#FF9800', borderWidth: 4 }
+        ]}>
           <Image source={LOGO} style={styles.logoImage} resizeMode="contain" />
         </View>
 
-        <Text style={styles.timer}>{formatTime(timer)}</Text>
+        <Text style={styles.statusText}>
+          {status === 'Processing' ? 'AI is thinking...' : `Status: ${status}`}
+        </Text>
 
-        <TouchableOpacity 
-          style={[styles.endCallButton, isSaving && styles.disabledButton]} 
-          onPress={handleEndCall}
-          disabled={isSaving}
+        <View style={styles.transcriptContainer}>
+          {transcribedText ? <Text style={styles.userText}>User: {transcribedText}</Text> : null}
+          {assistantReply ? <Text style={styles.aiText}>AI: {assistantReply}</Text> : null}
+        </View>
+
+        <TouchableOpacity
+          style={styles.endCallButton}
+          onPress={async () => {
+            callActiveRef.current = false;
+            await stopEverything();
+            router.replace('/call_summary'); 
+            // router.back();
+          }}
         >
           <View style={styles.endCallIcon} />
         </TouchableOpacity>
         
-        {isSaving && (
+        {/* {isSaving && (
           <Text style={styles.savingText}>Saving call record...</Text>
-        )}
+        )} */}
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 25,
-  },
-  contentBox: {
-    width: 309,
-    height: 591,
-    borderWidth: 1.5,
-    borderColor: '#AF100A',
-    borderRadius: 10,
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingTop: 30,
-  },
-  title: {
-    fontFamily: 'Poppins',
-    fontWeight: '500',
-    fontSize: 29,
-    lineHeight: 44,
-    textAlign: 'center',
-    color: '#1E1E1E',
-    width: '100%',
-    marginBottom: 60,
-  },
-  logoCircle: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    borderWidth: 1.5,
-    borderColor: '#AF100A',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 27,
-  },
-  logoImage: {
-    width: 100,
-    height: 100,
-  },
-  timer: {
-    fontFamily: 'Poppins',
-    fontWeight: '400',
-    fontSize: 19,
-    lineHeight: 28,
-    textAlign: 'center',
-    color: '#1E1E1E',
-    marginBottom: 28,
-  },
-  endCallButton: {
-    width: 85,
-    height: 85,
-    borderRadius: 42.5,
-    borderWidth: 1.5,
-    borderColor: '#AF100A',
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  disabledButton: {
-    opacity: 0.5,
-  },
-  endCallIcon: {
-    width: 45,
-    height: 45,
-    backgroundColor: '#B01409',
-    borderRadius: 22.5,
-  },
-  savingText: {
-    fontFamily: 'Poppins',
-    fontSize: 14,
-    color: '#666',
-    marginTop: 10,
-  },
+  container: { flex: 1, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center' },
+  contentBox: { width: 320, height: 600, borderWidth: 1.5, borderColor: '#AF100A', borderRadius: 20, alignItems: 'center', paddingTop: 40 },
+  title: { fontSize: 24, fontWeight: 'bold', color: '#1E1E1E', marginBottom: 40 },
+  logoCircle: { width: 140, height: 140, borderRadius: 70, borderWidth: 1.5, borderColor: '#AF100A', justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
+  logoImage: { width: 90, height: 90 },
+  statusText: { fontSize: 16, color: '#666', marginBottom: 10 },
+  transcriptContainer: { paddingHorizontal: 20, height: 160, width: '100%' },
+  userText: { fontSize: 14, color: '#333', fontStyle: 'italic' },
+  aiText: { fontSize: 14, color: '#AF100A', fontWeight: 'bold', marginTop: 5 },
+  endCallButton: { width: 70, height: 70, borderRadius: 35, borderWidth: 1.5, borderColor: '#AF100A', justifyContent: 'center', alignItems: 'center', marginTop: 30 },
+  endCallIcon: { width: 30, height: 30, backgroundColor: '#B01409', borderRadius: 5 },
 });

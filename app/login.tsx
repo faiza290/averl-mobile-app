@@ -24,13 +24,18 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     try {
-      const response = await axios.post('http://192.168.100.7:8000/api/login', {
+      const response = await axios.post('http://192.168.18.28:8000/api/login', {
         username: username,
         password: password,
       });
       console.log('Login success:', response.data);
+      
+      const userObject = response.data.user;
+
       await SecureStore.setItemAsync('userToken', response.data.token); 
       await SecureStore.setItemAsync('userRole', response.data.user.role);
+      await SecureStore.setItemAsync('user', JSON.stringify(userObject));
+
       router.push('/(tabs)/home');
     } catch (error: any) {
       console.error('Login error:', error.response?.data || error.message);

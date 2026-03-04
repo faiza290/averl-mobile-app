@@ -37,7 +37,7 @@ export default function HistoryScreen() {
         return;
       }
 
-      const response = await axios.get('http://192.168.100.7:8000/api/call-history', {
+      const response = await axios.get('http://192.168.18.28:8000/api/call-history', {
         headers: { Authorization: `Bearer ${token}` }
       });
 

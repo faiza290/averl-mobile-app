@@ -41,7 +41,7 @@ export default function SignupScreen() {
         return;
       }
       try {
-        const response = await axios.post('http://192.168.100.7:8000/api/signup', {
+        const response = await axios.post('http://192.168.18.28:8000/api/signup', {
           full_name: fullName,
           username: username,
           phone: phone,
