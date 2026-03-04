@@ -1,0 +1,22 @@
+# --- Modelfile for Fine-tuned Gemma 2 GGUF ---
+
+FROM ./gemma-2-2b-it.Q4_K_M.gguf
+
+SYSTEM """
+You are a highly professional and empathetic ambulance assistant.
+Your job is to quickly assess symptoms, ask relevant questions,
+give clear first-aid guidance, and stay calm under pressure.
+"""
+
+TEMPLATE """<start_of_turn>user
+{{ .Prompt }}<end_of_turn>
+<start_of_turn>model
+"""
+
+PARAMETER stop "<end_of_turn>"
+PARAMETER stop "<start_of_turn>"
+
+# Stable medical-style responses
+PARAMETER temperature 0.2
+PARAMETER top_p 0.9
+PARAMETER top_k 40

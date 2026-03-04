@@ -1,9 +1,6 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from motor.motor_asyncio import AsyncIOMotorClient
-from dotenv import load_dotenv
-import os
 import hashlib
 from datetime import datetime, timedelta
 from enum import Enum
@@ -11,22 +8,11 @@ from typing import List, Optional
 from bson import ObjectId
 import jwt
 
-load_dotenv()
+router = APIRouter(prefix="/api", tags=["Auth"])
 
-app = FastAPI(title="Rescue AI API")
+db = None
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-client = AsyncIOMotorClient(os.getenv("MONGODB_URI"))
-db = client.rescue_ai
-
-SECRET_KEY = os.getenv("SECRET_KEY")
+SECRET_KEY = None
 ALGORITHM = "HS256"
 
 class UserRole(str, Enum):
@@ -48,7 +34,7 @@ class LoginResponse(BaseModel):
     token: str
     user: dict
 
-@app.post("/api/signup", response_model=LoginResponse)
+@router.post("/signup", response_model=LoginResponse)
 async def signup(user: UserCreate):
     users_collection = db.users
     
@@ -99,7 +85,7 @@ class LoginRequest(BaseModel):
     username: str
     password: str
 
-@app.post("/api/login", response_model=LoginResponse)
+@router.post("/login", response_model=LoginResponse)
 async def login(login: LoginRequest):
     users_collection = db.users
     
@@ -117,7 +103,8 @@ async def login(login: LoginRequest):
     token_data = {
         "sub": user["username"],
         "role": user["role"],
-        "exp": datetime.utcnow() + timedelta(hours=24)
+        "exp": datetime.utcnow() + timedelta(hours=24),
+        "address": user["address"],
     }
     token = jwt.encode(token_data, SECRET_KEY, algorithm=ALGORITHM)
     
@@ -155,14 +142,19 @@ async def get_current_user(authorization: str = Header(...)):
         token = authorization.split(" ")[1]
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username = payload.get("sub")
+        address=payload.get("address")
         if username is None:
             raise HTTPException(status_code=401, detail="Invalid authentication")
-        return username
+        return {
+         "username": username,
+         "address": address
+        }
+        # return username
     except (PyJWTError, IndexError):
         raise HTTPException(status_code=401, detail="Invalid authentication")
 
 # Add these new endpoints after your existing ones
-@app.post("/api/call-records")
+@router.post("/call-records")
 async def save_call_record(
     record: CallRecordCreate,
     username: str = Depends(get_current_user)
@@ -190,7 +182,7 @@ async def save_call_record(
         "id": str(result.inserted_id)
     }
 
-@app.get("/api/call-history", response_model=CallHistoryResponse)
+@router.get("/call-history", response_model=CallHistoryResponse)
 async def get_call_history(
     username: str = Depends(get_current_user)
 ):
@@ -219,6 +211,6 @@ async def get_call_history(
     return {"calls": formatted_calls}
 
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+# if __name__ == "__main__":
+#     import uvicorn
+#     uvicorn.run(app, host="0.0.0.0", port=8000)

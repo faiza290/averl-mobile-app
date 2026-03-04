@@ -1,0 +1,19 @@
+for backend:
+
+1) install ollama from google, then in cmd type:
+ollama create ambulance-assistant -f Modelfile
+
+2) for installations of python packages:
+if using conda
+conda env create -f environment.yml
+
+else
+pip install -r requirements.txt
+
+3) generate api key from elevenlab and paste in apikey variable in voice2.py
+
+4) to run the app : uvicorn test:app --host 0.0.0.0 --port 8000 --reload
+for frontend:
+
+1)npm install 
+2)npm run dev
