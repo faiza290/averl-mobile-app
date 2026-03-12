@@ -17,3 +17,10 @@ for frontend:
 
 1)npm install 
 2)npm run dev
+
+
+for now:
+run npm install dotenv
+make env file in root folder , add this
+EXPO_PUBLIC_API_URL=http://192.lm.kk.ll:8000(your ip)
+

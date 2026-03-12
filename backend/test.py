@@ -2,7 +2,7 @@ import os
 from fastapi.middleware.cors import CORSMiddleware
 import time
 from io import BytesIO
-from fastapi import FastAPI, UploadFile, File,Depends
+from fastapi import FastAPI, UploadFile, File,Depends,Body
 from fastapi.responses import StreamingResponse
 from pydub import AudioSegment
 import numpy as np
@@ -12,13 +12,18 @@ from elevenlabs.client import ElevenLabs
 import base64
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 import json
-
+from fastapi import HTTPException, Depends, Header
+from datetime import datetime
+from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
-import os
+from pydantic import BaseModel
+
+class ClearChatRequest(BaseModel):
+    call_id: str
 
 import service
-from service import get_current_user  
+from service import get_current_user
 
 load_dotenv()
 
@@ -147,7 +152,7 @@ async def chat_audio(file: UploadFile = File(...),current_user: dict = Depends(g
 
         if is_address_question(reply_en):
           reply_en = (
-           "I already have your location. Help is on the way. "
+           "Please stay calm. Help is on the way to you."
         )
 
         user_contexts[username].append({"role": "assistant", "content": reply_en})
@@ -163,7 +168,7 @@ async def chat_audio(file: UploadFile = File(...),current_user: dict = Depends(g
         # 3. TTS Stream (ElevenLabs Flash for speed)
         audio_stream = client.text_to_speech.convert(
           text=reply_ur,
-          voice_id="21m00Tcm4TlvDq8ikWAM",
+          voice_id="pNInz6obpgDQGcFmaJgB",
           model_id="eleven_multilingual_v2",
           output_format="mp3_44100_128",
         )
@@ -188,7 +193,8 @@ async def chat_audio(file: UploadFile = File(...),current_user: dict = Depends(g
     
 
 @app.post("/clear_chat")
-async def clear_chat(current_user: dict = Depends(get_current_user)):
+async def clear_chat(req: ClearChatRequest, current_user: dict = Depends(get_current_user)):
+    call_id = req.call_id
     username = current_user["username"]
     user_address = current_user["address"]
 
@@ -197,20 +203,39 @@ async def clear_chat(current_user: dict = Depends(get_current_user)):
      return {"report": "No conversation found for this user"}
    
     json_dump=json.dumps(user_contexts[username], indent=2)
-    json_input=f"""
-Based ONLY on the conversation provided:
-- Identify emergency type
-- List observed symptoms explicitly mentioned
-- Assign a criticality level (LOW, MEDIUM, HIGH, LIFE-THREATENING)
+    print(json_dump)
 
-Output STRICT JSON.
-Do not invent facts.
-{json_dump}
+    from copy import deepcopy
+
+    conversation_messages = deepcopy(user_contexts[username])
+
+    conversation_messages.append({
+    "role": "user",
+    "content": f"""
+    You are an Emergency Response AI. Based ONLY on the conversation below, output STRICT JSON in the following schema:
+
+   {{
+      "emergency_type": "string",               # Example: 'Heat exhaustion'
+      "symptoms": ["string"],                   # List all symptoms explicitly mentioned
+      "criticality": "LOW | MEDIUM | HIGH | LIFE-THREATENING"
+   }}
+
+   Rules:
+   - Do NOT repeat the conversation
+   - Do NOT add explanations
+   - Do NOT use markdown, backticks, or any formatting
+   - Do NOT invent facts not mentioned in the conversation
+   - If information is missing, set the field to null
+
+    Conversation:
+   {conversation_messages}
     """
-    report.append({"role": "user", "content": json_input})
+   })
+
+    # report.append({"role": "user", "content": json_input})
     start = time.time()
     try:
-        response = ollama.chat(model="ambulance-assistant", messages=report)
+        response = ollama.chat(model="ambulance-assistant", messages=conversation_messages)
     except Exception as e:
         print(f"An error occurred: {e}")
         return {"report": "Unable to generate report"}
@@ -224,20 +249,49 @@ Do not invent facts.
     except json.JSONDecodeError:
       return {"report": "Model returned invalid JSON"}
 
-    # For clear_chat, you may pass username via Header or JSON
-
+    
     if isinstance(data, list) and len(data) > 0:
       data[0]["address"] = user_address
       
     assistant_reply = json.dumps(data, indent=2)
 
-    print(assistant_reply)
-
     print("\n--- Ambulance Assistant Response ---")
     print(assistant_reply)
     print(f"Response time: {end - start:.3f} seconds\n")
+
+    report_json = None
+    report_valid = False
+
+    try:
+      report_json = json.loads(assistant_reply)
+      report_valid = True
+    except json.JSONDecodeError:
+      report_json = None
+      report_valid = False
+
+    if report_valid and isinstance(report_json, dict):
+     report_json["address"] = user_address
+
+    calls_collection = db.calls
+
+    result=await calls_collection.update_one(
+     {"_id": ObjectId(call_id)},
+      {
+        "$set": {
+            "report": report_json,
+            "report_raw": assistant_reply,
+            "report_valid": report_valid
+        }
+      }
+    )
+
     user_contexts[username].clear()
-    return {"report": assistant_reply}
+
+    return {
+     "message": "Call record updated",
+     "call_id": call_id,
+     "updated": result.modified_count   
+    }
 
 if __name__ == "__main__":
     import uvicorn

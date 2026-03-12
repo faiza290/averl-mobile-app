@@ -155,10 +155,8 @@ async def get_current_user(authorization: str = Header(...)):
 
 # Add these new endpoints after your existing ones
 @router.post("/call-records")
-async def save_call_record(
-    record: CallRecordCreate,
-    username: str = Depends(get_current_user)
-):
+async def save_call_record( record: CallRecordCreate, current_user: dict = Depends(get_current_user)):
+    username = current_user["username"]
     """Save a call record when user ends a call"""
     calls_collection = db.calls
     
@@ -180,12 +178,13 @@ async def save_call_record(
     return {
         "message": "Call record saved",
         "id": str(result.inserted_id)
-    }
+    }  
 
 @router.get("/call-history", response_model=CallHistoryResponse)
 async def get_call_history(
-    username: str = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user)
 ):
+    username = current_user["username"]
     """Get call history for the current user"""
     calls_collection = db.calls
     
