@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
+
 import {
   StyleSheet,
   Text,
@@ -53,7 +55,7 @@ export default function SignupScreen() {
     }
 
     try {
-      const response = await axios.post('http://192.168.18.28:8000/api/signup', {
+      const response = await axios.post(`${API_URL}/api/signup`, {
         full_name: fullName.trim(),
         username: username.trim(),
         phone: phone.trim(),

@@ -1,6 +1,8 @@
 import { useRouter } from 'expo-router';
 import axios from 'axios'; // add at top
 import React, { useState } from 'react';
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
+
 import {
   Image,
   KeyboardAvoidingView,
@@ -24,7 +26,7 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     try {
-      const response = await axios.post('http://192.168.18.28:8000/api/login', {
+      const response = await axios.post(`${API_URL}/api/login`, {
         username: username,
         password: password,
       });

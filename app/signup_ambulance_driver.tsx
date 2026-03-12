@@ -2,6 +2,8 @@ import { Ionicons } from '@expo/vector-icons'; // ← add this import
 import axios from 'axios'; // add at top
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
+
 import {
     Image,
     KeyboardAvoidingView,
@@ -41,7 +43,7 @@ export default function SignupScreen() {
         return;
       }
       try {
-        const response = await axios.post('http://192.168.18.28:8000/api/signup', {
+        const response = await axios.post(`${API_URL}/api/signup`, {
           full_name: fullName,
           username: username,
           phone: phone,

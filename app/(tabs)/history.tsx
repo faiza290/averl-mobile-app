@@ -1,5 +1,7 @@
 // app/(tabs)/history.tsx
 import React, { useState } from 'react';
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
+
 import {
   View,
   Text,
@@ -37,7 +39,7 @@ export default function HistoryScreen() {
         return;
       }
 
-      const response = await axios.get('http://192.168.18.28:8000/api/call-history', {
+      const response = await axios.get(`${API_URL}/api/call-history`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 

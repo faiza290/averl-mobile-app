@@ -2,8 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, Alert } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { useRouter } from "expo-router";
-
-const BACKEND_URL = "http://192.168.18.28:8000";
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export default function CallSummaryScreen() {
   const router = useRouter();
@@ -25,7 +24,7 @@ export default function CallSummaryScreen() {
         }
       
       
-      const res = await fetch(`${BACKEND_URL}/clear_chat`, {
+      const res = await fetch(`${API_URL}/clear_chat`, {
         method: 'POST',
          headers: { Authorization: `Bearer ${token}` },
 

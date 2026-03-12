@@ -4,11 +4,11 @@ import { StyleSheet, Text, TouchableOpacity, View, Image, Alert } from "react-na
 import { useRouter } from "expo-router";
 import { Audio } from "expo-av";
 import * as SecureStore from 'expo-secure-store';
-
+import axios from 'axios';
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 const LOGO = require("../assets/images/averl_logo.png");
 
-const BACKEND_URL = "http://192.168.18.28:8000";
 const VAD_THRESHOLD = -45;//prv it was -65 
 const SILENCE_DURATION = 1800;
 const CHECK_INTERVAL = 200;
@@ -25,12 +25,30 @@ export default function UserInCallScreen() {
 
   const recordingRef = useRef<Audio.Recording | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
-  const monitorIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
+  const monitorIntervalRef = useRef<number | null>(null);
   const isSpeakingRef = useRef(false);
   const lastAudioTimeRef = useRef(Date.now());
   const callActiveRef = useRef(true);
   const startingRef = useRef(false);
+
+  const [timer, setTimer] = useState<number>(0);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const timerRef = useRef<number | null>(null);
+  const isMounted = useRef<boolean>(true);
+  const startTimeRef = useRef<Date>(new Date());
+
+  const formatTime = (seconds: number): string => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes.toString().padStart(2, '0')} : ${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+  const formatDuration = (seconds: number): string => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
 
   /* ---------------- INIT ---------------- */
   useEffect(() => {
@@ -51,9 +69,25 @@ export default function UserInCallScreen() {
       startRecordingLoop();
     })();
 
+    startTimeRef.current = new Date();
+
+    timerRef.current = setInterval(() => {
+      setTimer((prev) => {
+        if (!isMounted.current) {
+          return prev;
+        }
+        return prev + 1;
+      });
+    }, 1000);
+
     return () => {
+      isMounted.current = false;
+      if (timerRef.current !== null) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
       callActiveRef.current = false;
-      stopEverything();
+      // stopEverything();
     };
   }, []);
 
@@ -67,23 +101,9 @@ export default function UserInCallScreen() {
     try {
       const recording = new Audio.Recording();
 
-      await recording.prepareToRecordAsync({
-        android: {
-          extension: ".webm",
-          outputFormat: Audio.RECORDING_OPTION_ANDROID_OUTPUT_FORMAT_WEBM,
-          audioEncoder: Audio.RECORDING_OPTION_ANDROID_AUDIO_ENCODER_OPUS,
-          sampleRate: 16000,
-          numberOfChannels: 1,
-          bitRate: 128000,
-        },
-        ios: {
-          extension: ".wav",
-          audioQuality: Audio.RECORDING_OPTION_IOS_AUDIO_QUALITY_HIGH,
-          sampleRate: 16000,
-          numberOfChannels: 1,
-        },
-        isMeteringEnabled: true,
-      });
+      await recording.prepareToRecordAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
 
       recording.setOnRecordingStatusUpdate((s) => {
         if (!callActiveRef.current) return;
@@ -149,7 +169,7 @@ export default function UserInCallScreen() {
       }
 
 
-      const res = await fetch(`${BACKEND_URL}/chat_audio`, {
+      const res = await fetch(`${API_URL}/chat_audio`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
@@ -180,11 +200,14 @@ export default function UserInCallScreen() {
       soundRef.current = sound;
       setStatus("AI Speaking");
 
-      sound.setOnPlaybackStatusUpdate(async (s) => {
-        if (s.didJustFinish && callActiveRef.current) {
-          await sound.unloadAsync();
-          soundRef.current = null;
-          setTimeout(startRecordingLoop, 300);
+      sound.setOnPlaybackStatusUpdate(async (status) => {
+        if (status.isLoaded) {
+          if (status.didJustFinish && callActiveRef.current) {
+            await sound.unloadAsync();
+            soundRef.current = null;
+
+            setTimeout(startRecordingLoop, 300);
+          }
         }
       });
     } catch (e) {
@@ -195,24 +218,86 @@ export default function UserInCallScreen() {
     }
   };
 
+  const saveCallRecord = async (durationSeconds: number) => {
+    try {
+      setIsSaving(true);
+      const token = await SecureStore.getItemAsync('userToken');
+
+      if (!token) {
+        console.log('No token found, cannot save call record');
+        return;
+      }
+
+      const duration = formatDuration(durationSeconds);
+
+      const response = await axios.post(
+        `${API_URL}/api/call-records`,
+        { duration },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      const call_id = response.data.id
+      const res = await axios.post(
+        `${API_URL}/clear_chat`,
+        { call_id },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+
+          }
+        }
+
+      )
+
+      console.log('Call record saved successfully');
+    } catch (error: any) {
+      console.error('Error saving call record:', error.response?.data || error.message);
+      throw new Error('Error saving call record');
+      // Don't show alert to user, just log the error
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   /* ---------------- STOP ---------------- */
   const stopEverything = async () => {
     clearInterval(monitorIntervalRef.current!);
 
     if (recordingRef.current) {
-      try { await recordingRef.current.stopAndUnloadAsync(); } catch {}
+      try { await recordingRef.current.stopAndUnloadAsync(); } catch { }
       recordingRef.current = null;
     }
 
     if (soundRef.current) {
-      try { await soundRef.current.stopAsync(); } catch {}
+      try { await soundRef.current.stopAsync(); } catch { }
       soundRef.current = null;
     }
+
+    isMounted.current = false;
+    if (timerRef.current !== null) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    // Save the call record
+    saveCallRecord(timer);
+
+    router.back();
   };
+
+
   return (
     <View style={styles.container}>
       <View style={styles.contentBox}>
         <Text style={styles.title}>Rescue AI Call</Text>
+
+        <Text style={styles.timer}>{formatTime(timer)}</Text>
+
 
         <View style={[
           styles.logoCircle,
@@ -232,20 +317,19 @@ export default function UserInCallScreen() {
         </View>
 
         <TouchableOpacity
-          style={styles.endCallButton}
-          onPress={async () => {
+          style={[styles.endCallButton, isSaving && styles.disabledButton]}
+          onPress={() => {
             callActiveRef.current = false;
-            await stopEverything();
-            router.replace('/call_summary'); 
-            // router.back();
+            stopEverything();
           }}
+          disabled={isSaving}
         >
           <View style={styles.endCallIcon} />
         </TouchableOpacity>
-        
-        {/* {isSaving && (
+
+        {isSaving && (
           <Text style={styles.savingText}>Saving call record...</Text>
-        )} */}
+        )}
       </View>
     </View>
   );
@@ -253,7 +337,7 @@ export default function UserInCallScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center' },
-  contentBox: { width: 320, height: 600, borderWidth: 1.5, borderColor: '#AF100A', borderRadius: 20, alignItems: 'center', paddingTop: 40 },
+  contentBox: { width: 320, height: 650, borderWidth: 1.5, borderColor: '#AF100A', borderRadius: 20, alignItems: 'center', paddingTop: 40 },
   title: { fontSize: 24, fontWeight: 'bold', color: '#1E1E1E', marginBottom: 40 },
   logoCircle: { width: 140, height: 140, borderRadius: 70, borderWidth: 1.5, borderColor: '#AF100A', justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
   logoImage: { width: 90, height: 90 },
@@ -261,6 +345,27 @@ const styles = StyleSheet.create({
   transcriptContainer: { paddingHorizontal: 20, height: 160, width: '100%' },
   userText: { fontSize: 14, color: '#333', fontStyle: 'italic' },
   aiText: { fontSize: 14, color: '#AF100A', fontWeight: 'bold', marginTop: 5 },
-  endCallButton: { width: 70, height: 70, borderRadius: 35, borderWidth: 1.5, borderColor: '#AF100A', justifyContent: 'center', alignItems: 'center', marginTop: 30 },
-  endCallIcon: { width: 30, height: 30, backgroundColor: '#B01409', borderRadius: 5 },
+  endCallButton: { width: 85, height: 85, borderRadius: 42.5, borderWidth: 1.5, borderColor: '#AF100A', justifyContent: 'center', alignItems: 'center' },
+  endCallIcon: { width: 45, height: 45, backgroundColor: '#B01409', borderRadius: 22.5 },
+
+  timer: {
+    fontFamily: 'Poppins',
+    fontWeight: '400',
+    fontSize: 19,
+    lineHeight: 28,
+    textAlign: 'center',
+    color: '#1E1E1E',
+    marginBottom: 28,
+  },
+
+  disabledButton: {
+    opacity: 0.5,
+  },
+
+  savingText: {
+    fontFamily: 'Poppins',
+    fontSize: 14,
+    color: '#666',
+    marginTop: 10,
+  },
 });
