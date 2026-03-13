@@ -5,7 +5,7 @@ import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
-const LOGO = require('../assets/images/averl_logo.png');
+const LOGO = require('../../assets/images/averl_logo.png');
 
 export default function UserInCallScreen() {
   const router = useRouter();

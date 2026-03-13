@@ -31,7 +31,7 @@ export default function LoginScreen() {
       console.log('Login success:', response.data);
       await SecureStore.setItemAsync('userToken', response.data.token); 
       await SecureStore.setItemAsync('userRole', response.data.user.role);
-      router.push('/(tabs)/home');
+      router.push('/(user)/(tabs)/home');
     } catch (error: any) {
       console.error('Login error:', error.response?.data || error.message);
       alert('Login failed: ' + (error.response?.data?.detail || 'Try again'));
