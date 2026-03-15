@@ -51,7 +51,7 @@ export default function SignupScreen() {
           role: "ambulance"
         });
         console.log('Signup success:', response.data);
-        router.push('/(tabs)/home');
+        router.push('/(user)/(tabs)/home');
       } catch (error: any) {
         console.error('Signup error:', error.response?.data || error.message);
         alert('Signup failed: ' + (error.response?.data?.detail || 'Try again'));

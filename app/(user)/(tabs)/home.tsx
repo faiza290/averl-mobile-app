@@ -4,8 +4,8 @@ import { useRouter } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import React, { useState, useEffect } from 'react';
 
-const AMBULANCE_IMG = require('../../assets/images/ambulance_img.png');        
-const CALL_HISTORY_IMG = require('../../assets/images/person_calling.jpg'); 
+const AMBULANCE_IMG = require('../../../assets/images/ambulance_img.png');        
+const CALL_HISTORY_IMG = require('../../../assets/images/person_calling.jpg'); 
 
 export default function HomeScreen() {
   const router = useRouter();

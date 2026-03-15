@@ -1,8 +1,9 @@
-import { useRouter } from 'expo-router';
 import axios from 'axios'; // add at top
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
+import * as SecureStore from 'expo-secure-store';
 import {
   Image,
   KeyboardAvoidingView,
@@ -15,7 +16,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
 
 const LOGO = require('../assets/images/averl_logo.png');
 
@@ -31,14 +31,34 @@ export default function LoginScreen() {
         password: password,
       });
       console.log('Login success:', response.data);
-      
-      const userObject = response.data.user;
 
-      await SecureStore.setItemAsync('userToken', response.data.token); 
-      await SecureStore.setItemAsync('userRole', response.data.user.role);
+      const userObject = response.data.user;
+      const role = response.data.user.role;   // ← this is what we use
+
+      // Save everything (you already do this)
+      await SecureStore.setItemAsync('userToken', response.data.token);
+      await SecureStore.setItemAsync('userRole', role);
       await SecureStore.setItemAsync('user', JSON.stringify(userObject));
 
-      router.push('/(tabs)/home');
+      // === NEW: Role-based redirect ===
+      let targetRoute: string;
+
+      switch (role) {
+        case 'admin':
+          targetRoute = '/(admin)/(tabs)/home';
+          break;
+
+        // case 'ambulance':
+        //   targetRoute = '/(ambulance)/(tabs)/home';
+        //   break;
+
+        default: // regular user
+          targetRoute = '/(user)/(tabs)/home';
+      }
+
+      console.log(`Redirecting ${username} (${role}) to ${targetRoute}`);
+      router.push(targetRoute as any);   // ← this silences the error
+
     } catch (error: any) {
       console.error('Login error:', error.response?.data || error.message);
       alert('Login failed: ' + (error.response?.data?.detail || 'Try again'));

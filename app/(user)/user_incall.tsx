@@ -7,7 +7,7 @@ import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
-const LOGO = require("../assets/images/averl_logo.png");
+const LOGO = require("../../assets/images/averl_logo.png");
 
 const VAD_THRESHOLD = -45;//prv it was -65 
 const SILENCE_DURATION = 1800;

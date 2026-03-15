@@ -71,7 +71,7 @@ export default function SignupScreen() {
       await SecureStore.setItemAsync('userRole', response.data.user.role);
 
       alert('Account created successfully!');
-      router.push('/(tabs)/home');
+      router.push('/(user)/(tabs)/home');
     } catch (error: any) {
       console.error('Signup error:', error.response?.data || error.message);
       const msg = error.response?.data?.detail || 'Something went wrong. Please try again.';

@@ -38,13 +38,6 @@ export default function SignupScreen() {
         <Text style={styles.categoryText}>Ambulance Driver</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity 
-        style={styles.categoryCard}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.categoryText}>Hospital Administration</Text>
-      </TouchableOpacity>
-
       <Text style={styles.alreadyText}> Or </Text>
 
       <Text style={styles.alreadyText}>

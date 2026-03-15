@@ -3,13 +3,13 @@ import { Image, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
-const LOGO=require('../../assets/images/averl_logo.png');
-const HOME_ICON=require('../../assets/images/home_icon.png');//normal state
-const HOME_ACTIVE_ICON=require('../../assets/images/home_active_icon.png');//focused state
-const CONTACT_ICON=require('../../assets/images/contact_icon.png');//normal state
-const CONTACT_ACTIVE_ICON=require('../../assets/images/contact_active_icon.png');//focused state
-const HISTORY_ICON=require('../../assets/images/history_icon.png');//normal state
-const HISTORY_ACTIVE_ICON=require('../../assets/images/history_active_icon.png');//focused state
+const LOGO=require('../../../assets/images/averl_logo.png');
+const HOME_ICON=require('../../../assets/images/home_icon.png');//normal state
+const HOME_ACTIVE_ICON=require('../../../assets/images/home_active_icon.png');//focused state
+const CONTACT_ICON=require('../../../assets/images/contact_icon.png');//normal state
+const CONTACT_ACTIVE_ICON=require('../../../assets/images/contact_active_icon.png');//focused state
+const HISTORY_ICON=require('../../../assets/images/history_icon.png');//normal state
+const HISTORY_ACTIVE_ICON=require('../../../assets/images/history_active_icon.png');//focused state
 
 function CustomHeader() {
   const insets = useSafeAreaInsets();
